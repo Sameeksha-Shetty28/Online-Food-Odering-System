@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Menu from "./pages/Menu";
@@ -7,10 +7,44 @@ import Cart from "./pages/Cart";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Profile from "./pages/Profile";
-import AdminDashboard from "./admin/AdminDashboard";
-import AddFood from "./admin/AddFood";
-import ManageOrders from "./admin/ManageOrders";
-import Users from "./admin/Users";
+import AdminLogin from "./admin/AdminLogin.jsx";
+import AdminDashboard from "./admin/AdminDashboard.jsx";
+import AddFood from "./admin/AddFood.jsx";
+import EditFood from "./admin/EditFood.jsx";
+import DeleteFood from "./admin/DeleteFood.jsx";
+import ManageOrders from "./admin/ManageOrders.jsx";
+import Users from "./admin/Users.jsx";
+import { clearAdminAuth } from "./admin/adminApi";
+const BASE_URL = "http://127.0.0.1:8000/api";
+
+function ProtectedAdminRoute({ children }) {
+  const adminToken = localStorage.getItem("adminToken");
+  return adminToken ? children : <Navigate to="/admin/login" replace />;
+}
+
+function AdminSessionWatcher() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!location.pathname.startsWith("/admin")) {
+      clearAdminAuth();
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const clearAdminOnExit = () => {
+      clearAdminAuth();
+    };
+
+    window.addEventListener("beforeunload", clearAdminOnExit);
+    return () => {
+      window.removeEventListener("beforeunload", clearAdminOnExit);
+      clearAdminAuth();
+    };
+  }, []);
+
+  return null;
+}
 
 const starterMenu = [
   {
@@ -136,10 +170,7 @@ const starterOrders = [
 ];
 
 function App() {
-  const [menuItems, setMenuItems] = useState(() => {
-    const savedMenu = localStorage.getItem("fooddash-menu");
-    return savedMenu ? JSON.parse(savedMenu) : starterMenu;
-  });
+  const [menuItems, setMenuItems] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [users, setUsers] = useState(() => {
@@ -155,13 +186,79 @@ function App() {
     return savedCurrentUser ? JSON.parse(savedCurrentUser) : null;
   });
 
+  const saveBackendAuth = (data) => {
+    if (data?.token) {
+      localStorage.setItem("token", data.token);
+    }
+
+    if (data?.user) {
+      localStorage.setItem("fooddash-backend-user", JSON.stringify(data.user));
+    }
+  };
+
+  const syncCartToBackend = async (items) => {
+    if (!currentUser) {
+      return;
+    }
+
+    try {
+      const data = { userId: currentUser.id, items };
+      console.log("Sending request:", data);
+      const response = await fetch(`${BASE_URL}/cart/${currentUser.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+      });
+      const result = await response.json();
+      console.log("Cart API response:", response.status, result);
+    } catch (err) {
+      console.log("API failed, using local data", err);
+    }
+  };
+
+  const clearBackendCart = async () => {
+    if (!currentUser) {
+      return;
+    }
+
+    try {
+      const data = { userId: currentUser.id };
+      console.log("Sending request:", data);
+      const response = await fetch(`${BASE_URL}/cart/${currentUser.id}`, {
+        method: "DELETE"
+      });
+      const result = await response.json();
+      console.log("Clear cart API response:", response.status, result);
+    } catch (err) {
+      console.log("API failed, using local data", err);
+    }
+  };
+
   useEffect(() => {
     document.title = "Food Ordering System";
   }, []);
 
+  const fetchFoods = useCallback(async () => {
+    try {
+      console.log("Menu fetch request:", { url: `${BASE_URL}/foods` });
+      const response = await fetch(`${BASE_URL}/foods`);
+      const data = await response.json();
+      console.log("Menu fetch foods:", response.status, data.foods);
+
+      if (Array.isArray(data.foods)) {
+        setMenuItems(data.foods);
+      }
+    } catch (err) {
+      console.log("Menu fetch failed, using starter data only as fallback", err);
+      setMenuItems((currentItems) => (currentItems.length ? currentItems : starterMenu));
+    }
+  }, []);
+
   useEffect(() => {
-    localStorage.setItem("fooddash-menu", JSON.stringify(menuItems));
-  }, [menuItems]);
+    fetchFoods();
+  }, [fetchFoods]);
 
   useEffect(() => {
     localStorage.setItem("fooddash-users", JSON.stringify(users));
@@ -187,37 +284,70 @@ function App() {
   const addToCart = (item) => {
     setCartItems((currentItems) => {
       const existingItem = currentItems.find((cartItem) => cartItem.id === item.id);
+      let nextItems;
 
       if (existingItem) {
-        return currentItems.map((cartItem) =>
+        nextItems = currentItems.map((cartItem) =>
           cartItem.id === item.id
             ? { ...cartItem, quantity: cartItem.quantity + 1 }
             : cartItem
         );
+      } else {
+        nextItems = [...currentItems, { ...item, quantity: 1 }];
       }
 
-      return [...currentItems, { ...item, quantity: 1 }];
+      if (currentUser) {
+        (async () => {
+          try {
+            const data = { userId: currentUser.id, item: nextItems.find((cartItem) => cartItem.id === item.id) };
+            console.log("Sending request:", data);
+            const response = await fetch(`${BASE_URL}/cart`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            console.log("Add cart API response:", response.status, result);
+          } catch (err) {
+            console.log("API failed, using local data", err);
+          }
+        })();
+      }
+
+      return nextItems;
     });
   };
 
   const increaseQuantity = (id) => {
-    setCartItems((currentItems) =>
-      currentItems.map((item) =>
+    setCartItems((currentItems) => {
+      const nextItems = currentItems.map((item) =>
         item.id === id ? { ...item, quantity: item.quantity + 1 } : item
-      )
-    );
+      );
+      syncCartToBackend(nextItems);
+      return nextItems;
+    });
   };
 
   const decreaseQuantity = (id) => {
-    setCartItems((currentItems) =>
-      currentItems
+    setCartItems((currentItems) => {
+      const nextItems = currentItems
         .map((item) => (item.id === id ? { ...item, quantity: item.quantity - 1 } : item))
-        .filter((item) => item.quantity > 0)
-    );
+        .filter((item) => item.quantity > 0);
+      syncCartToBackend(nextItems);
+      return nextItems;
+    });
   };
 
   const addFoodItem = (newItem) => {
-    setMenuItems((currentItems) => [{ ...newItem, id: Date.now() }, ...currentItems]);
+    setMenuItems((currentItems) => [{ ...newItem, id: newItem.id || Date.now() }, ...currentItems]);
+  };
+
+  const removeFoodItem = (foodId) => {
+    setMenuItems((currentItems) =>
+      currentItems.filter((food) => food._id !== foodId && food.id !== foodId)
+    );
   };
 
   const loginUser = ({ email, password }) => {
@@ -239,6 +369,29 @@ function App() {
     }
 
     setCurrentUser(existingUser);
+
+    (async () => {
+      try {
+        const data = {
+          email: normalizedEmail,
+          password: password.trim()
+        };
+        console.log("Sending request:", data);
+        const response = await fetch(`${BASE_URL}/users/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        console.log("Login API response:", response.status, result);
+        saveBackendAuth(result);
+      } catch (err) {
+        console.log("API failed, using local data", err);
+      }
+    })();
+
     return { ok: true };
   };
 
@@ -268,6 +421,30 @@ function App() {
 
     setUsers((currentUsers) => [newUser, ...currentUsers]);
 
+    (async () => {
+      try {
+        const data = {
+          name: newUser.name,
+          email: newUser.email,
+          password: newUser.password,
+          phone: newUser.phone
+        };
+        console.log("Sending request:", data);
+        const response = await fetch(`${BASE_URL}/users/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        console.log("Register API response:", response.status, result);
+        saveBackendAuth(result);
+      } catch (err) {
+        console.log("API failed, using local data", err);
+      }
+    })();
+
     return {
       ok: true,
       message: "Registration successful. Please log in with your new account."
@@ -275,6 +452,7 @@ function App() {
   };
 
   const logoutUser = () => {
+    clearBackendCart();
     setCurrentUser(null);
     setCartItems([]);
   };
@@ -317,6 +495,38 @@ function App() {
       currentUsers.map((user) => (user.id === currentUser.id ? updatedUser : user))
     );
     setCurrentUser(updatedUser);
+
+    console.log("Sending order to backend:", {
+      userId: currentUser.id,
+      items: cartItems,
+      total: orderTotal,
+      status: "Placed"
+    });
+
+    (async () => {
+      try {
+        const response = await fetch(`${BASE_URL}/orders`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            items: cartItems,
+            total: orderTotal,
+            status: "Placed"
+          })
+        });
+        console.log("Order API response status:", response.status);
+        const data = await response.json();
+        console.log("Order API success:", data);
+      } catch (err) {
+        console.log("API failed, using local data", err);
+      }
+    })();
+
+    clearBackendCart();
     setCartItems([]);
 
     return {
@@ -334,6 +544,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="site-shell">
+        <AdminSessionWatcher />
         <Navbar
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -348,7 +559,14 @@ function App() {
           />
           <Route
             path="/menu"
-            element={<Menu items={filteredItems} onAddToCart={addToCart} searchTerm={searchTerm} />}
+            element={
+              <Menu
+                items={filteredItems}
+                onAddToCart={addToCart}
+                searchTerm={searchTerm}
+                onRefreshFoods={fetchFoods}
+              />
+            }
           />
           <Route
             path="/cart"
@@ -369,19 +587,68 @@ function App() {
             path="/profile"
             element={<Profile currentUser={currentUser} userOrders={currentUserOrders} />}
           />
+          <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
           <Route
-            path="/admin"
+            path="/admin/dashboard"
             element={
-              <AdminDashboard
-                itemCount={menuItems.length}
-                orderCount={orders.length}
-                userCount={users.length}
-              />
+              <ProtectedAdminRoute>
+                <AdminDashboard
+                  itemCount={menuItems.length}
+                  orderCount={orders.length}
+                  userCount={users.length}
+                />
+              </ProtectedAdminRoute>
             }
           />
-          <Route path="/admin/add-food" element={<AddFood onAddFood={addFoodItem} />} />
-          <Route path="/admin/manage-orders" element={<ManageOrders orders={orders} />} />
-          <Route path="/admin/users" element={<Users users={users} orders={orders} />} />
+          <Route
+            path="/admin/add-food"
+            element={
+              <ProtectedAdminRoute>
+                <AddFood onAddFood={addFoodItem} />
+              </ProtectedAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/edit-food"
+            element={
+              <ProtectedAdminRoute>
+                <EditFood />
+              </ProtectedAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/edit-food/:id"
+            element={
+              <ProtectedAdminRoute>
+                <EditFood />
+              </ProtectedAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/delete-food"
+            element={
+              <ProtectedAdminRoute>
+                <DeleteFood onFoodDeleted={removeFoodItem} />
+              </ProtectedAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/orders"
+            element={
+              <ProtectedAdminRoute>
+                <ManageOrders />
+              </ProtectedAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedAdminRoute>
+                <Users />
+              </ProtectedAdminRoute>
+            }
+          />
         </Routes>
       </div>
     </BrowserRouter>

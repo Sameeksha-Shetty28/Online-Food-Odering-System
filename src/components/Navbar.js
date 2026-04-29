@@ -19,7 +19,7 @@ function Navbar({ searchTerm, setSearchTerm, cartCount, currentUser, onLogout })
         <NavLink to="/login">Login</NavLink>
         <NavLink to="/register">Register</NavLink>
         <NavLink to="/profile">Profile</NavLink>
-        <NavLink to="/admin">Admin</NavLink>
+        <NavLink to="/admin/login">Admin</NavLink>
       </nav>
 
       <div className="navbar__right">

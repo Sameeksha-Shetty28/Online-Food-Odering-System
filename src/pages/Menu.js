@@ -1,7 +1,12 @@
+import { useEffect } from "react";
 import FoodCard from "../components/FoodCard";
 import "../styles/home.css";
 
-function Menu({ items, onAddToCart, searchTerm }) {
+function Menu({ items, onAddToCart, searchTerm, onRefreshFoods }) {
+  useEffect(() => {
+    onRefreshFoods();
+  }, [onRefreshFoods]);
+
   return (
     <main className="page">
       <section className="section">

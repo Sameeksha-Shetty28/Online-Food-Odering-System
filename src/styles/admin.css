@@ -1,0 +1,142 @@
+.admin-page {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 56px;
+}
+
+.admin-hero,
+.admin-card,
+.admin-form-card,
+.order-card,
+.user-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 28px;
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+}
+
+.admin-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px;
+  margin-bottom: 24px;
+}
+
+.admin-eyebrow {
+  color: #ea580c;
+  font-weight: 800;
+}
+
+.admin-hero h1,
+.admin-form-card h1 {
+  margin: 0;
+}
+
+.admin-hero p {
+  color: #6b7280;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.admin-actions a,
+.admin-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 16px;
+  color: white;
+  font-weight: 800;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.admin-card {
+  padding: 24px;
+}
+
+.admin-card h2 {
+  margin: 0 0 6px;
+  font-size: 2rem;
+}
+
+.admin-card p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.admin-form-card {
+  padding: 28px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.admin-form input,
+.admin-form textarea {
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+}
+
+.order-list,
+.user-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.order-card,
+.user-card {
+  padding: 20px;
+}
+
+.order-card__top,
+.user-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.order-card p,
+.user-card p {
+  color: #6b7280;
+}
+
+.user-card span {
+  display: block;
+  margin-top: 6px;
+  color: #6b7280;
+  font-size: 0.92rem;
+}
+
+.user-card__meta {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+@media (max-width: 760px) {
+  .admin-hero,
+  .order-card__top,
+  .user-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
